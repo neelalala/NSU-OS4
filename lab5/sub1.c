@@ -49,7 +49,10 @@ int main() {
 
         printf("Parent process sleeps for 10 sec...\n");
         sleep(10);
-   	
+	
+	printf("Global var address: %p, value: %d\n", &global_var, global_var);
+        printf("Local var address: %p, value: %d\n", &local_var, local_var);
+
 	int status;
         int wpid = wait(&status);
 
