@@ -18,8 +18,12 @@ int main() {
         printf("Check for child process state:\n");
         printf("  cat /proc/%d/status\n", cpid);
 
-        sleep(60);
-        
+        sleep(20);
+
+	int wpid;
+	wait(&wpid);
+	printf("Check for child status again\n");
+        sleep(20);
         printf("Parent process finihed\n");
     } else {
 	perror("Error while fork()");
