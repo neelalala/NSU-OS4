@@ -18,9 +18,9 @@ void handle_client(int client_sock) {
 
     while ((n = read(client_sock, buffer, BUFFER_SIZE - 1)) > 0) {
         buffer[n] = '\0';
-        printf("Received from client: %s\n", buffer);
+        printf("(pid: %d) Received from client: %s\n", getpid(), buffer);
         write(client_sock, buffer, n);
-        printf("Sent back to client: %s\n", buffer);
+        printf("(pid: %d) Sent back to client: %s\n", getpid(), buffer);
     }
 
     if (n == 0) {
