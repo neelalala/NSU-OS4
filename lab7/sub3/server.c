@@ -13,6 +13,12 @@
 #define BUFFER_SIZE 1024
 #define MAX_CLIENTS 128
 
+ struct Data {
+    char buffer[BUFFER_SIZE];
+    int buffer_len;
+    int has_data_to_send;
+};
+
 int main() {
     int server_sock, client_sock;
     struct sockaddr_in server_addr, client_addr;
@@ -24,8 +30,10 @@ int main() {
     }
 
     struct pollfd fds[MAX_CLIENTS + 1];
+    struct Data client_data[MAX_CLIENTS + 1];
     int nfds = 1;
 
+    memset(client_data, 0, sizeof(client_data));
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = inet_addr(ADDRESS);
@@ -46,13 +54,12 @@ int main() {
 
     printf("TCP Echo Server listening on port %d\n", PORT);
 
-    char buffer[BUFFER_SIZE];
-
     while (1) {
         if(poll(fds, nfds, -1) < 0) {
             perror("poll failed");
             continue;
         }
+
         for (int i = 0; i < nfds; i++) {
             if (fds[i].revents & POLLIN) {
                 if (i == 0) {
@@ -65,27 +72,51 @@ int main() {
                     if (nfds < MAX_CLIENTS + 1) {
                         fds[nfds].fd = client_sock;
                         fds[nfds].events = POLLIN;
+                        client_data[nfds].has_data_to_send = 0;
+                        client_data[nfds].buffer_len = 0;
                         nfds++;
                         printf("New connection accepted, client fd: %d\n", client_sock);
                     } else {
                         printf("Too many clients\n");
                         close(client_sock);
                     }
-                } else {
-                    int n = read(fds[i].fd, buffer, BUFFER_SIZE - 1);
+                } else if (!client_data[i].has_data_to_send) {
+                    int n = read(fds[i].fd, client_data[i].buffer, BUFFER_SIZE - 1);
                     if (n > 0) {
-                        buffer[n] = '\0';
-                        printf("Received from client (fd %d): %s\n", fds[i].fd, buffer);
-                        write(fds[i].fd, buffer, n);
-                        printf("Sent back to client (fd %d): %s\n", fds[i].fd, buffer);
+                        client_data[i].buffer[n] = '\0';
+                        client_data[i].buffer_len = n;
+                        client_data[i].has_data_to_send = 1;
+
+                        printf("Received from client (fd %d): %s\n", fds[i].fd, client_data[i].buffer);
+
+                        fds[i].events = POLLIN | POLLOUT;
                     } else if (n == 0) {
                         printf("Client disconnected (fd %d)\n", fds[i].fd);
                         close(fds[i].fd);
                         fds[i].fd = -1;
+                        client_data[i].has_data_to_send = 0;
                     } else {
                         perror("read failed");
                         close(fds[i].fd);
                         fds[i].fd = -1;
+                        client_data[i].has_data_to_send = 0;
+                    }
+                }
+            }
+
+            if (fds[i].revents & POLLOUT && i > 0) {
+                if (client_data[i].has_data_to_send) {
+                    int bytes_sent = write(fds[i].fd, client_data[i].buffer, client_data[i].buffer_len);
+                    if (bytes_sent > 0) {
+                        printf("Sent back to client (fd %d): %s\n", fds[i].fd, client_data[i].buffer);
+                        client_data[i].has_data_to_send = 0;
+                        client_data[i].buffer_len = 0;
+                        fds[i].events = POLLIN;
+                    } else if (bytes_sent < 0) {
+                        perror("write failed");
+                        close(fds[i].fd);
+                        fds[i].fd = -1;
+                        client_data[i].has_data_to_send = 0;
                     }
                 }
             }
@@ -94,12 +125,16 @@ int main() {
         int new_nfds = 1;
         for (int i = 1; i < nfds; i++) {
             if (fds[i].fd != -1) {
-                fds[new_nfds] = fds[i];
+                if (new_nfds != i) {
+                    fds[new_nfds] = fds[i];
+                    client_data[new_nfds] = client_data[i];
+                }
                 new_nfds++;
             }
         }
         nfds = new_nfds;
     }
+
+    close(server_sock);
+    return 0;
 }
-
-
